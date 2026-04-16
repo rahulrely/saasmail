@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  SCHEDULED
+  RECEIVED
+}
+
+model User {
+  id               String                @id @default(cuid())
+  name             String?
+  email            String                @unique
+  emailVerified    DateTime?
+  passwordHash     String?
+  image            String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  accounts         Account[]
+  sessions         Session[]
+  providerConfig   EmailProviderConfig?
+  templates        EmailTemplate[]
+  sentEmails       SentEmailLog[]
+  receivedEmails   ReceivedEmail[]
+  domains          Domain[]
+  rateLimitEvents  RateLimitEvent[]
+}
+
+model EmailProviderConfig {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  resendApiKeyEnc   String
+  verifiedDomain    String
+  productName       String
+  defaultFromEmail  String
+  webhookSecretEnc  String?
+  lastValidatedAt   DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailTemplate {
+  id             String    @id @default(cuid())
+  userId         String
+  name           String
+  subject        String
+  htmlContent    String    @db.Text
+  variablesJson  Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sentEmails     SentEmailLog[]
+
+  @@unique([id, userId])
+  @@index([userId, createdAt])
+}
+
+model SentEmailLog {
+  id             String               @id @default(cuid())
+  userId         String
+  templateId     String?
+  recipient      String
+  subject        String
+  renderedHtml   String               @db.Text
+  variablesJson  Json?
+  status         EmailDeliveryStatus  @default(PENDING)
+  resendEmailId  String?
+  errorMessage   String?              @db.Text
+  scheduledFor   DateTime?
+  sentAt         DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template       EmailTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, status, createdAt])
+}
+
+model ReceivedEmail {
+  id                 String    @id @default(cuid())
+  userId             String
+  resendEventId      String?   @unique
+  fromEmail          String
+  toEmail            String
+  subject            String?
+  textBody           String?   @db.Text
+  htmlBody           String?   @db.Text
+  attachmentsMeta    Json?
+  headersJson        Json?
+  rawPayload         Json
+  receivedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Domain {
+  id                String    @id @default(cuid())
+  userId            String
+  resendDomainId    String?   @unique
+  name              String
+  status            String
+  region            String?
+  recordsJson       Json?
+  lastSyncedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId, createdAt])
+}
+
+model RateLimitEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  route      String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, route, createdAt])
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sessionToken])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@id([identifier, token])
+}
