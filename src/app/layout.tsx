@@ -11,6 +11,11 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   title: "SaaSMail",
   description: "Multi-tenant Resend-powered email platform built with Next.js 15.",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
