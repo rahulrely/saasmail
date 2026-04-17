@@ -14,7 +14,7 @@ type ResendWebhookHeaders = {
 type GenericWebhookPayload = {
   type?: string;
   created_at?: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
 };
 
 export function verifyResendWebhook(payload: string, headers: ResendWebhookHeaders) {
@@ -26,7 +26,7 @@ export function verifyResendWebhook(payload: string, headers: ResendWebhookHeade
   }) as GenericWebhookPayload;
 }
 
-function extractRecipientList(data: Record<string, any>) {
+function extractRecipientList(data: Record<string, unknown>) {
   const raw = data.to ?? data.recipients ?? [];
   if (Array.isArray(raw)) return raw.map(String);
   if (typeof raw === "string") return raw.split(",").map((value) => value.trim());
@@ -103,16 +103,26 @@ export async function persistIncomingWebhook(payload: GenericWebhookPayload) {
       : payload.type === "email.bounced"
         ? EmailDeliveryStatus.FAILED
         : undefined;
+  const resendEmailId =
+    typeof data.email_id === "string" ? data.email_id : typeof data.id === "string" ? data.id : undefined;
+  const bounceMessage =
+    data.bounce && typeof data.bounce === "object" && "message" in data.bounce && typeof data.bounce.message === "string"
+      ? data.bounce.message
+      : undefined;
+  const fromEmail = extractEmailAddress(typeof data.from === "string" ? data.from : "unknown@unknown");
+  const subject = typeof data.subject === "string" ? data.subject : null;
+  const textBody = typeof data.text === "string" ? data.text : null;
+  const htmlBody = typeof data.html === "string" ? data.html : null;
 
   if (payload.type?.startsWith("email.")) {
     await db.sentEmailLog.updateMany({
       where: {
         userId,
-        resendEmailId: data.email_id ?? data.id,
+        resendEmailId,
       },
       data: {
         status: deliveryStatus,
-        errorMessage: data.bounce?.message ?? undefined,
+        errorMessage: bounceMessage,
       },
     });
   }
@@ -137,11 +147,11 @@ export async function persistIncomingWebhook(payload: GenericWebhookPayload) {
       return db.receivedEmail.create({
         data: {
           userId,
-          fromEmail: extractEmailAddress(data.from ?? "unknown@unknown"),
+          fromEmail,
           toEmail: extractEmailAddress(recipients[0] ?? "unknown@unknown"),
-          subject: data.subject ?? null,
-          textBody: data.text ?? null,
-          htmlBody: data.html ?? null,
+          subject,
+          textBody,
+          htmlBody,
           attachmentsMeta: (data.attachments ?? []) as Prisma.InputJsonValue,
           headersJson: (data.headers ?? {}) as Prisma.InputJsonValue,
           rawPayload: payload as Prisma.InputJsonValue,
@@ -155,11 +165,11 @@ export async function persistIncomingWebhook(payload: GenericWebhookPayload) {
       create: {
         userId,
         resendEventId,
-        fromEmail: extractEmailAddress(data.from ?? "unknown@unknown"),
+        fromEmail,
         toEmail: extractEmailAddress(recipients[0] ?? "unknown@unknown"),
-        subject: data.subject ?? null,
-        textBody: data.text ?? null,
-        htmlBody: data.html ?? null,
+        subject,
+        textBody,
+        htmlBody,
         attachmentsMeta: (data.attachments ?? []) as Prisma.InputJsonValue,
         headersJson: (data.headers ?? {}) as Prisma.InputJsonValue,
         rawPayload: payload as Prisma.InputJsonValue,
